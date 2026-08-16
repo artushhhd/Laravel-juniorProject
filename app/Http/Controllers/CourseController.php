@@ -16,17 +16,22 @@ use Illuminate\Support\Facades\Storage;
 
 class CourseController extends Controller
 {
-    public function index(Request $request): JsonResponse{
-
+    public function index(Request $request): JsonResponse
+{
     $user = auth('sanctum')->user();
+
     $courses = Course::with(['author', 'comments.user'])
         ->withCount('likes')
+        ->when($user, function ($query) use ($user) {
+            $query->withExists(['likes as is_liked' => function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            }]);
+        }, function ($query) {
+            $query->selectSub('0', 'is_liked');
+        })
         ->latest()
-        ->get()
-        ->map(function ($course) use ($user) {
-            $course->is_liked = $user ? $course->likes()->where('user_id', $user->id)->exists() : false;
-            return $course;
-        });
+        ->get();
+
     return response()->json([
         'success' => true,
         'data' => $courses
