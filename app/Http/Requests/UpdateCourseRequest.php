@@ -17,8 +17,12 @@ class UpdateCourseRequest extends FormRequest
     public function rules(): array
     {
         return [
+<<<<<<< HEAD
             'title' => ['sometimes', 'required', 'string', 'max:255'],
         'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
+=======
+            'title' => ['required', 'string', 'max:255'],
+>>>>>>> 2276e63be9f11e6b982176a9438165cf5096ad19
         ];
     }
 }

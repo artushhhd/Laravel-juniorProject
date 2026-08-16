@@ -16,30 +16,23 @@ use Illuminate\Support\Facades\Storage;
 
 class CourseController extends Controller
 {
+    public function index(Request $request): JsonResponse{
 
-
-   public function index(Request $request): JsonResponse
-{
     $user = auth('sanctum')->user();
-
     $courses = Course::with(['author', 'comments.user'])
         ->withCount('likes')
-        ->when($user, function ($query) use ($user) {
-            $query->withExists(['likes as is_liked' => function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            }]);
-        }, function ($query) {
-            $query->selectSub('0', 'is_liked');
-        })
         ->latest()
-        ->get();
-
+        ->get()
+        ->map(function ($course) use ($user) {
+            $course->is_liked = $user ? $course->likes()->where('user_id', $user->id)->exists() : false;
+            return $course;
+        });
     return response()->json([
         'success' => true,
         'data' => $courses
     ]);
 }
-public function store(CourseRequest $request): JsonResponse
+    public function store(CourseRequest $request): JsonResponse
     {
         $data = $request->validated();
 
@@ -57,25 +50,14 @@ public function store(CourseRequest $request): JsonResponse
         ], 201);
     }
 
-    public function show(Request $request, Course $course): JsonResponse
-{
-    $user = auth('sanctum')->user();
-
-    $course->load(['author', 'comments.user']);
-    $course->loadCount('likes');
-
-    if ($user) {
-        $course->is_liked = $course->likes()->where('user_id', $user->id)->exists();
-    } else {
-        $course->is_liked = false;
+    public function show(Course $course): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => 'Course retrieved successfully',
+            'data'    => $course->load('author')
+        ]);
     }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Course retrieved successfully',
-        'data'    => $course
-    ]);
-}
 
     public function update(CourseRequest $request, Course $course): JsonResponse
     {
@@ -99,35 +81,21 @@ public function store(CourseRequest $request): JsonResponse
         ]);
     }
 
-    public function destroy(Request $request, Course $course): JsonResponse{
+    public function destroy(Course $course): JsonResponse
+    {
 
-    $user = $request->user();
-    if (!$user) {
+        if ($course->image) {
+            Storage::disk('public')->delete($course->image);
+        }
+
+        $course->delete();
+
         return response()->json([
-            'success' => false,
-            'message' => 'Unauthenticated. Please login first.'
-        ], 401);
+            'success' => true,
+            'message' => 'Course deleted successfully',
+            'data'    => null
+        ]);
     }
-    if ($course->user_id !== $user->id) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized. You can only delete your own courses.'
-        ], 403);
-    }
-
-    if ($course->image) {
-        Storage::disk('public')->delete($course->image);
-    }
-
-    $course->delete();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Course deleted successfully',
-        'data'    => null
-    ]);
-}
-
     public function toggleLike(int $id): JsonResponse
 {
     $course = Course::findOrFail($id);
