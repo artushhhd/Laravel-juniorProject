@@ -6,7 +6,6 @@ use App\Models\{User, Course};
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Storage, Auth};
-
 class AdminController extends Controller
 {
     public function index(): JsonResponse
@@ -28,12 +27,10 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'courses' => $courses]);
     }
 
-    // --- МЕТОД ДЛЯ РЕДАКТИРОВАНИЯ КУРСА ---
     public function updateCourse(Request $request, int $id): JsonResponse
     {
         $currentUser = Auth::user();
 
-        // Редактировать курс может только superadmin
         if (!$currentUser || strtolower($currentUser->role) !== 'superadmin') {
             return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
         }

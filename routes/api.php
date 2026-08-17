@@ -17,7 +17,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
 
     Route::post('/courses/{course}/like', [CourseController::class, 'toggleLike']);
-    Route::post('/courses/{course}/comments', [CourseController::class, 'storeComment']);
+    Route::post('/courses/{course}/comment', [CourseController::class, 'storeComment']);
 
     Route::post('/courses', [CourseController::class, 'store']);
     Route::put('/courses/{course}', [CourseController::class, 'update']);
