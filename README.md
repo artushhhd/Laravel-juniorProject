@@ -1,6 +1,6 @@
 # Course Platform API (Laravel)
 
-Backend API for a small course platform, built with Laravel + Sanctum. Handles auth, courses, likes/comments and a basic admin panel with roles. Pairs with the frontend here: [Next-juniorProject](https://github.com/yourname/Next-juniorProject).
+Backend API for a small course platform, built with Laravel + Sanctum. Handles auth, courses, likes/comments and a basic admin panel with roles. Pairs with the frontend here: [Next-juniorProject](https://github.com/artushhhd/Next-juniorProject).
 
 ## Stack
 
