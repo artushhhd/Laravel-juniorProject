@@ -1,47 +1,75 @@
-# Course Platform API (Laravel)
+# Course Platform API
 
-Backend API for a small course platform, built with Laravel + Sanctum. Handles auth, courses, likes/comments and a basic admin panel with roles. Pairs with the frontend here: [Next-juniorProject](https://github.com/artushhhd/Next-juniorProject).
+REST API for a small course platform, built with Laravel. The project covers authentication, role-based access control, course management, likes, comments, image uploads, and admin moderation.
 
-## Stack
+Frontend: [junior-frontend-app](https://github.com/artushhhd/junior-frontend-app)
 
-- PHP 8.3, Laravel 13
-- Laravel Sanctum (token auth)
-- MySQL/SQLite via Eloquent + migrations
+## Tech Stack
 
-## What it does
+- PHP 8.3+
+- Laravel 13
+- Laravel Sanctum 4 — token-based authentication
+- Eloquent ORM
+- MySQL or SQLite
+- PHPUnit
 
-**Auth**
-- Register / login / logout with Sanctum tokens
-- Accounts can be blocked by an admin (`is_active` flag), blocked users can't log in
+## Features
 
-**Courses**
-- Full CRUD, image upload, only the author can edit/delete their own course
-- Likes (many-to-many, toggle on/off)
+### Authentication
+
+- User registration and login
+- Sanctum token authentication
+- Logout and authenticated profile endpoint
+- Account blocking through the admin panel
+- Blocked users cannot log in
+
+### Courses
+
+- Create, read, update and delete courses
+- Image upload
+- Course ownership checks
+- Like / unlike courses
 - Comments
+- Admin course approval and moderation
 
-**Roles & admin**
-Four roles: `user`, `moderator`, `admin`, `superadmin`. Admin routes are behind an `AdminCheck` middleware. Some rules I added on purpose:
-- moderators can't see/touch courses made by admins or superadmin
-- admins can't block/delete other admins
-- only superadmin can touch a superadmin account
+### Roles & Authorization
 
-## Project structure
+The application has four roles:
 
-```
+- `user`
+- `moderator`
+- `admin`
+- `superadmin`
+
+Administrative routes are protected by middleware and role-based authorization rules.
+
+Some examples:
+
+- Moderators cannot manage courses created by admins or superadmins
+- Admins cannot block or delete other admins
+- Only a superadmin can manage a superadmin account
+
+## Project Structure
+
+```text
 app/
 ├── Http/
-│   ├── Controllers/   # UserController, CourseController, AdminController
-│   ├── Middleware/    # AdminCheck
-│   └── Requests/      # form request validation
-├── Models/             # User, Course, CourseComment
-└── UserRole.php
-routes/api.php
-database/migrations/
+│   ├── Controllers/   # API controllers
+│   ├── Middleware/    # Authentication / admin middleware
+│   └── Requests/      # Request validation
+├── Models/            # Eloquent models
+└── UserRole.php       # User role definitions
+
+routes/
+└── api.php            # API routes
+
+database/
+└── migrations/       # Database schema
 ```
 
-## Main endpoints
+## Main API Endpoints
 
-```
+```text
 POST   /api/register
 POST   /api/login
 POST   /api/logout                (auth)
@@ -63,20 +91,49 @@ POST   /api/admin/users/{id}/toggle-block
 DELETE /api/admin/users/{id}
 ```
 
-## Setup
+## Installation
+
+### 1. Install dependencies
 
 ```bash
 composer install
+```
+
+### 2. Configure the environment
+
+```bash
 cp .env.example .env
 php artisan key:generate
+```
+
+The included `.env.example` uses SQLite by default. MySQL can be configured by changing the `DB_*` variables in `.env`.
+
+### 3. Run migrations
+
+```bash
 php artisan migrate
+```
+
+### 4. Start the API
+
+```bash
 php artisan serve
 ```
 
-Runs on `http://127.0.0.1:8000` by default.
+The API is available at:
 
-## Tests
+```text
+http://127.0.0.1:8000
+```
+
+### 5. Run tests
 
 ```bash
 php artisan test
 ```
+
+## Frontend
+
+The corresponding Next.js frontend is available here:
+
+**[junior-frontend-app](https://github.com/artushhhd/junior-frontend-app)**
