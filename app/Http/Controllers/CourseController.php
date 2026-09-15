@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Models\Course;
 use App\Http\Requests\CourseRequest;
 use App\Http\Requests\StoreCommentRequest;
+use App\Models\Course;
 use App\Models\CourseComment;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -17,51 +17,39 @@ use Illuminate\Support\Facades\Storage;
 class CourseController extends Controller
 {
     public function index(Request $request): JsonResponse
-{
-    $user = auth('sanctum')->user();
+    {
+        $user = auth('sanctum')->user();
 
-    $courses = Course::with(['author', 'comments.user'])
-        ->withCount('likes')
-        ->when($user, function ($query) use ($user) {
-            $query->withExists(['likes as is_liked' => function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            }]);
-        }, function ($query) {
-            $query->selectSub('0', 'is_liked');
-        })
-        ->latest()
-        ->get();
+        $courses = Course::with(['author:id,name', 'comments.user'])
+            ->withCount('likes')
+            ->when($user, fn($q) => $q->withExists([
+                'likes as is_liked' => fn($q) => $q->where('user_id', $user->id),
+            ]))
+            ->latest()
+            ->paginate(20);
 
-    return response()->json([
-        'success' => true,
-        'data' => $courses
-    ]);
-}
+        return response()->json(['success' => true, 'data' => $courses]);
+    }
+
+    public function show(Course $course): JsonResponse
+    {
+        $course->load(['author:id,name', 'comments.user']);
+
+        return response()->json(['success' => true, 'data' => $course]);
+    }
+
     public function store(CourseRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $data['user_id'] = $request->user()->id;
 
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('courses', 'public');
         }
 
-        $data['user_id'] = $request->user()->id;
         $course = Course::create($data);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Course created successfully',
-            'data'    => $course
-        ], 201);
-    }
-
-    public function show(Course $course): JsonResponse
-    {
-        return response()->json([
-            'success' => true,
-            'message' => 'Course retrieved successfully',
-            'data'    => $course->load('author')
-        ]);
+        return response()->json(['success' => true, 'data' => $course], 201);
     }
 
     public function update(CourseRequest $request, Course $course): JsonResponse
@@ -79,15 +67,12 @@ class CourseController extends Controller
 
         $course->update($data);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Course updated successfully',
-            'data'    => $course
-        ]);
+        return response()->json(['success' => true, 'data' => $course]);
     }
 
     public function destroy(Course $course): JsonResponse
     {
+        Gate::authorize('delete', $course);
 
         if ($course->image) {
             Storage::disk('public')->delete($course->image);
@@ -95,38 +80,32 @@ class CourseController extends Controller
 
         $course->delete();
 
+        return response()->json(['success' => true]);
+    }
+
+    public function toggleLike(Course $course): JsonResponse
+    {
+        $user = Auth::user();
+        $result = $course->likes()->toggle($user->id);
+
         return response()->json([
             'success' => true,
-            'message' => 'Course deleted successfully',
-            'data'    => null
+            'is_liked' => count($result['attached']) > 0,
+            'likes_count' => $course->likes()->count(),
         ]);
     }
-    public function toggleLike(int $id): JsonResponse
-{
-    $course = Course::findOrFail($id);
-    $user = Auth::user();
-    $status = $course->likes()->toggle($user->id);
 
-    return response()->json([
-        'success' => true,
-        'is_liked' => count($status['attached']) > 0,
-        'likes_count' => $course->likes()->count()
-    ]);
-}
-public function storeComment(StoreCommentRequest $request, int $id): JsonResponse
+    public function storeComment(StoreCommentRequest $request, Course $course): JsonResponse
     {
-        $course = Course::findOrFail($id);
-
         $comment = CourseComment::create([
-            'user_id'   => $request->user()->id,
+            'user_id' => $request->user()->id,
             'course_id' => $course->id,
-            'content'   => $request->validated()['content'],
+            'content' => $request->validated('content'),
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Comment added successfully',
-            'data'    => $comment->load('user')
+            'data' => $comment->load('user'),
         ], 201);
     }
 }

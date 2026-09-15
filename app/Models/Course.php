@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Course extends Model
 {
@@ -15,7 +19,7 @@ class Course extends Model
         'image',
         'price',
         'status',
-        'published_at'
+        'published_at',
     ];
 
     protected $casts = [
@@ -23,27 +27,18 @@ class Course extends Model
         'published_at' => 'datetime',
     ];
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
-
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-    public function likes()
-{
-    return $this->belongsToMany(User::class, 'course_likes');
-}
 
-public function isLikedBy(?User $user): bool
-{
-    if (!$user) return false;
-    return $this->likes()->where('user_id', $user->id)->exists();
-}
-public function comments()
-{
-    return $this->hasMany(CourseComment::class)->with('user')->latest();
-}
+    public function likes(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'course_likes');
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(CourseComment::class)->latest();
+    }
 }

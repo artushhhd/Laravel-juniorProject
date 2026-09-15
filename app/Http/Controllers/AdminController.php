@@ -1,64 +1,53 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use App\Models\{User, Course};
+use App\Models\Course;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Storage, Auth};
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
 class AdminController extends Controller
 {
     public function index(): JsonResponse
     {
         $user = Auth::user();
-        $query = Course::with('author')->withCount('likes');
 
-        if ($user && str_contains(strtolower($user->role), 'moder')) {
-            $query->whereHas('author', function ($q) {
-                $q->whereNotIn('role', ['superadmin', 'admin']);
-            });
+        $query = Course::with('author:id,name,role')
+            ->withCount('likes')
+            ->withExists(['likes as is_liked' => fn($q) => $q->where('user_id', $user->id)]);
+
+        if ($user->isModerator() && !$user->isAdmin()) {
+            $query->whereHas('author', fn($q) => $q->whereNotIn('role', ['superadmin', 'admin']));
         }
 
-        $courses = $query->latest()->get()->map(function ($course) use ($user) {
-            $course->is_liked = $user ? $course->likes()->where('user_id', $user->id)->exists() : false;
-            return $course;
-        });
+        $courses = $query->latest()->paginate(30);
 
         return response()->json(['success' => true, 'courses' => $courses]);
     }
 
-    public function updateCourse(Request $request, int $id): JsonResponse
+    public function updateCourse(Request $request, Course $course): JsonResponse
     {
-        $currentUser = Auth::user();
+        abort_unless(Auth::user()->isSuperAdmin(), 403, 'Forbidden');
 
-        if (!$currentUser || strtolower($currentUser->role) !== 'superadmin') {
-            return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
-        }
+        $request->validate(['title' => 'required|string|max:255']);
 
-        $request->validate([
-            'title' => 'required|string|max:255',
-        ]);
+        $course->update(['title' => $request->input('title')]);
 
-        $course = Course::findOrFail($id);
-        $course->title = $request->input('title');
-        $course->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Course updated successfully',
-            'course'  => $course
-        ]);
+        return response()->json(['success' => true, 'course' => $course]);
     }
 
-    public function destroyCourse(int $id): JsonResponse
+    public function destroyCourse(Course $course): JsonResponse
     {
-        $course = Course::with('author')->findOrFail($id);
         $currentUser = Auth::user();
+        $course->load('author:id,role');
 
-        if ($course->author && strtolower($course->author->role) === 'superadmin') {
-            if (strtolower($currentUser->role) !== 'superadmin') {
-                return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
-            }
+        if ($course->author?->isSuperAdmin() && !$currentUser->isSuperAdmin()) {
+            return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
         }
 
         if ($course->image) {
@@ -66,72 +55,65 @@ class AdminController extends Controller
         }
 
         $course->delete();
-        return response()->json(['success' => true, 'message' => 'Deleted']);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function approve(Course $course): JsonResponse
+    {
+        $course->update(['status' => 'published']);
+
+        return response()->json(['success' => true, 'course' => $course]);
     }
 
     public function users(): JsonResponse
     {
-        $this->checkModer();
-        return response()->json([
-            'success' => true,
-            'users' => User::where('id', '!=', Auth::id())->latest()->get()
-        ]);
+        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
+
+        $users = User::where('id', '!=', Auth::id())
+            ->select('id', 'name', 'email', 'role', 'is_active', 'created_at')
+            ->latest()
+            ->paginate(30);
+
+        return response()->json(['success' => true, 'users' => $users]);
     }
 
-    public function toggleBlock(int $id): JsonResponse
+    public function toggleBlock(User $user): JsonResponse
     {
-        $this->checkModer();
-
-        $user = User::findOrFail($id);
         $currentUser = Auth::user();
+        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
 
-        $targetRole = strtolower($user->role);
-        $currentRole = strtolower($currentUser->role);
-
-        if ($targetRole === 'superadmin' && $currentRole !== 'superadmin') {
+        if ($user->isSuperAdmin() && !$currentUser->isSuperAdmin()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        if ($targetRole === 'admin' && $currentRole === 'admin') {
-            return response()->json(['message' => 'Admins cannot block other admins'], 403);
+        if ($user->isAdmin() && !$currentUser->isSuperAdmin()) {
+            return response()->json(['message' => 'Cannot manage admins'], 403);
         }
 
-        $user->is_active = !$user->is_active;
-        $user->save();
+        $user->update(['is_active' => !$user->is_active]);
 
         return response()->json([
             'success' => true,
-            'is_active' => (bool)$user->is_active,
-            'message' => $user->is_active ? 'Unblocked' : 'Blocked'
+            'is_active' => $user->is_active,
         ]);
     }
 
-    public function destroyUser(int $id): JsonResponse
+    public function destroyUser(User $user): JsonResponse
     {
-        $this->checkModer();
-
-        $user = User::findOrFail($id);
         $currentUser = Auth::user();
+        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
 
-        $targetRole = strtolower($user->role);
-        $currentRole = strtolower($currentUser->role);
-
-        if ($targetRole === 'superadmin') {
+        if ($user->isSuperAdmin()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        if ($targetRole === 'admin' && $currentRole === 'admin') {
-            return response()->json(['message' => 'Admins cannot delete other admins'], 403);
+        if ($user->isAdmin() && !$currentUser->isSuperAdmin()) {
+            return response()->json(['message' => 'Cannot delete admins'], 403);
         }
 
         $user->delete();
-        return response()->json(['success' => true, 'message' => 'Deleted']);
-    }
 
-    private function checkModer(): void
-    {
-        if (str_contains(strtolower(Auth::user()->role), 'moder')) {
-            abort(response()->json(['message' => 'Forbidden for moderators'], 403));
-        }
+        return response()->json(['success' => true]);
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -11,9 +13,8 @@ class AdminCheck
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        $roles = ['superadmin', 'admin', 'moder', 'moderator'];
 
-        if (!$user || !$user->is_active || !in_array(strtolower($user->role), $roles)) {
+        if (!$user || !$user->is_active || !$user->isStaff()) {
             return response()->json(['message' => 'Access denied'], 403);
         }
 
