@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateCourseTitleRequest;
 use App\Models\Course;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -21,7 +21,7 @@ class AdminController extends Controller
             ->withCount('likes')
             ->withExists(['likes as is_liked' => fn($q) => $q->where('user_id', $user->id)]);
 
-        if ($user->isModerator() && !$user->isAdmin()) {
+        if ($this->isModeratorOnly($user)) {
             $query->whereHas('author', fn($q) => $q->whereNotIn('role', ['superadmin', 'admin']));
         }
 
@@ -30,13 +30,9 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'courses' => $courses]);
     }
 
-    public function updateCourse(Request $request, Course $course): JsonResponse
+    public function updateCourse(UpdateCourseTitleRequest $request, Course $course): JsonResponse
     {
-        abort_unless(Auth::user()->isSuperAdmin(), 403, 'Forbidden');
-
-        $request->validate(['title' => 'required|string|max:255']);
-
-        $course->update(['title' => $request->input('title')]);
+        $course->update(['title' => $request->validated('title')]);
 
         return response()->json(['success' => true, 'course' => $course]);
     }
@@ -68,7 +64,7 @@ class AdminController extends Controller
 
     public function users(): JsonResponse
     {
-        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
+        $this->abortIfModeratorOnly();
 
         $users = User::where('id', '!=', Auth::id())
             ->select('id', 'name', 'email', 'role', 'is_active', 'created_at')
@@ -80,15 +76,10 @@ class AdminController extends Controller
 
     public function toggleBlock(User $user): JsonResponse
     {
-        $currentUser = Auth::user();
-        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
+        $this->abortIfModeratorOnly();
 
-        if ($user->isSuperAdmin() && !$currentUser->isSuperAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        if ($user->isAdmin() && !$currentUser->isSuperAdmin()) {
-            return response()->json(['message' => 'Cannot manage admins'], 403);
+        if ($response = $this->guardAgainstManagingStaff($user, 'Cannot manage admins')) {
+            return $response;
         }
 
         $user->update(['is_active' => !$user->is_active]);
@@ -101,19 +92,43 @@ class AdminController extends Controller
 
     public function destroyUser(User $user): JsonResponse
     {
-        $currentUser = Auth::user();
-        abort_if(Auth::user()->isModerator() && !Auth::user()->isAdmin(), 403);
+        $this->abortIfModeratorOnly();
 
-        if ($user->isSuperAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        if ($response = $this->guardAgainstManagingStaff($user, 'Cannot delete admins')) {
+            return $response;
         }
 
-        if ($user->isAdmin() && !$currentUser->isSuperAdmin()) {
-            return response()->json(['message' => 'Cannot delete admins'], 403);
-        }
+        $user->courses->each(
+            fn(Course $course) => $course->image && Storage::disk('public')->delete($course->image)
+        );
 
         $user->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    private function isModeratorOnly(User $user): bool
+    {
+        return $user->isModerator() && !$user->isAdmin();
+    }
+
+    private function abortIfModeratorOnly(): void
+    {
+        abort_if($this->isModeratorOnly(Auth::user()), 403);
+    }
+
+    private function guardAgainstManagingStaff(User $target, string $adminMessage): ?JsonResponse
+    {
+        $currentUser = Auth::user();
+
+        if ($target->isSuperAdmin() && !$currentUser->isSuperAdmin()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if ($target->isAdmin() && !$currentUser->isSuperAdmin()) {
+            return response()->json(['message' => $adminMessage], 403);
+        }
+
+        return null;
     }
 }

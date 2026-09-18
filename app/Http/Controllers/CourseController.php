@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class CourseController extends Controller
 {
@@ -25,14 +26,28 @@ class CourseController extends Controller
             ->when($user, fn($q) => $q->withExists([
                 'likes as is_liked' => fn($q) => $q->where('user_id', $user->id),
             ]))
+            ->when(
+                $user,
+                fn($q) => $q->where(fn($q) => $q->where('status', 'published')->orWhere('user_id', $user->id)),
+                fn($q) => $q->where('status', 'published'),
+            )
             ->latest()
             ->paginate(20);
 
         return response()->json(['success' => true, 'data' => $courses]);
     }
 
-    public function show(Course $course): JsonResponse
+    public function show(Request $request, Course $course): JsonResponse
     {
+        $user = auth('sanctum')->user();
+
+        if (
+            $course->status !== 'published'
+            && (!$user || ($course->user_id !== $user->id && !$user->isStaff()))
+        ) {
+            abort(404);
+        }
+
         $course->load(['author:id,name', 'comments.user']);
 
         return response()->json(['success' => true, 'data' => $course]);
@@ -42,6 +57,7 @@ class CourseController extends Controller
     {
         $data = $request->validated();
         $data['user_id'] = $request->user()->id;
+        $data['slug'] = $this->uniqueSlug($data['slug'] ?: $data['title']);
 
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('courses', 'public');
@@ -57,6 +73,10 @@ class CourseController extends Controller
         Gate::authorize('update', $course);
 
         $data = $request->validated();
+
+        if (isset($data['slug'])) {
+            $data['slug'] = $this->uniqueSlug($data['slug'], $course->id);
+        }
 
         if ($request->hasFile('image')) {
             if ($course->image) {
@@ -107,5 +127,21 @@ class CourseController extends Controller
             'success' => true,
             'data' => $comment->load('user'),
         ], 201);
+    }
+
+    private function uniqueSlug(string $base, ?int $ignoreId = null): string
+    {
+        $slug = Str::slug($base) ?: 'course';
+        $original = $slug;
+        $suffix = 2;
+
+        while (Course::where('slug', $slug)
+            ->when($ignoreId, fn($q) => $q->where('id', '!=', $ignoreId))
+            ->exists()
+        ) {
+            $slug = "{$original}-" . $suffix++;
+        }
+
+        return $slug;
     }
 }

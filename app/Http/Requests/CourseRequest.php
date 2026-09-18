@@ -19,7 +19,7 @@ class CourseRequest extends FormRequest
 
         return [
             'title'        => [$isPost ? 'required' : 'sometimes', 'string', 'max:255'],
-            'slug'         => [$isPost ? 'required' : 'sometimes', 'string', 'max:255'], 
+            'slug'         => ['nullable', 'string', 'max:255'],
             'description'  => ['nullable', 'string'],
             'price'        => [$isPost ? 'required' : 'sometimes', 'numeric', 'min:0'],
             'status'       => [$isPost ? 'required' : 'sometimes', 'in:draft,published,archived'],

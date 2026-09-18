@@ -5,14 +5,14 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/register', [UserController::class, 'register']);
-Route::post('/login', [UserController::class, 'login']);
+Route::post('/register', [UserController::class, 'register'])->middleware('throttle:10,1');
+Route::post('/login', [UserController::class, 'login'])->middleware('throttle:10,1');
 
 Route::get('/courses', [CourseController::class, 'index']);
 Route::get('/courses/{course}', [CourseController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', fn(\Illuminate\Http\Request $r) => $r->user());
+    Route::get('/user', [UserController::class, 'me']);
     Route::get('/profile', [UserController::class, 'profile']);
     Route::post('/logout', [UserController::class, 'logout']);
 

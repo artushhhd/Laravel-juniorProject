@@ -33,7 +33,7 @@ class UserController extends Controller
         $user = User::where('email', $data['email'])->first();
 
         if (!$user || !Hash::check($data['password'], $user->password)) {
-            return response()->json(['success' => false, 'message' => 'Invalid credentials.'], 422);
+            return response()->json(['success' => false, 'message' => 'Invalid credentials.'], 401);
         }
 
         if (!$user->is_active) {
@@ -48,6 +48,11 @@ class UserController extends Controller
                 'token_type' => 'Bearer',
             ],
         ]);
+    }
+
+    public function me(Request $request): User
+    {
+        return $request->user();
     }
 
     public function profile(Request $request): JsonResponse
