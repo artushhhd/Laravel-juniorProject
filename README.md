@@ -220,3 +220,6 @@ It consumes this API through a centralized JavaScript API client and environment
 
 This is a portfolio project focused on demonstrating practical backend development with Laravel: API design, authentication, authorization, validation, persistence, file storage, moderation and testing.
 
+
+
+> **Active portfolio version:** This is the current implementation of the Course Platform API. Historical development is preserved in `BackVibeCoding`.
